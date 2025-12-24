@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Royale - Randomiseur de Plateau</title>
+    <style>
+        :root {
+            --primary: #ff6b35;
+            --secondary: #4ecdc4;
+            --bg-dark: #1a1a2e;
+            --cell-size: 18px; /* Taille ajustable selon votre écran */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #16213e 100%);
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-transform: uppercase;
+            background: linear-gradient(45deg, var(--primary), #f7931e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 30px;
+            max-width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* --- PANNEAU DE CONTRÔLE --- */
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid var(--primary);
+            width: 300px;
+            height: fit-content;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-draw { background: var(--primary); color: white; font-size: 1.1em; }
+        .btn-reset { background: #444; color: white; }
+        .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .stat-val { color: var(--secondary); font-size: 1.5em; font-weight: bold; }
+
+        /* --- PLATEAU DE JEU --- */
+        #board-container {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            overflow: auto;
+            max-height: 80vh;
+        }
+
+        #game-board {
+            display: grid;
+            /* Le nombre de colonnes sera injecté par JS */
+            gap: 2px;
+        }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            border-radius: 2px;
+            font-size: 8px; /* Très petit car beaucoup de cases */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cell-empty { opacity: 0.05; background: #fff; }
+        .cell-active { background: rgba(78, 205, 196, 0.2); border: 1px solid rgba(78, 205, 196, 0.3); }
+
+        /* Case tirée */
+        .cell-selected {
+            background: var(--primary) !important;
+            box-shadow: 0 0 10px var(--primary);
+            animation: pulse 0.5s ease-out;
+            z-index: 10;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>⚔️ BATTLE ROYALE ⚔️</h1>
+        <p style="color: var(--secondary)">Randomiseur de Plateau</p>
+    </header>
+
+    <div class="main-layout">
+        <div class="controls">
+            <label>Cases à tirer :</label>
+            <input type="number" id="drawCount" value="1" min="1" style="width: 100%; padding: 8px; margin: 10px 0;">
+            
+            <button class="btn btn-draw" onclick="drawCells()">🎲 TIRER AU SORT</button>
+            <button class="btn btn-reset" onclick="resetGame()">🔄 RESET</button>
+
+            <div class="stat-grid">
+                <div>
+                    <div class="stat-val" id="stat-rem">0</div>
+                    <div>Restantes</div>
+                </div>
+                <div>
+                    <div class="stat-val" id="stat-drawn">0</div>
+                    <div>Tirées</div>
+                </div>
+            </div>
+            
+            <div id="log" style="margin-top: 20px; font-size: 0.9em; color: #ccc; max-height: 150px; overflow-y: auto;">
+                </div>
+        </div>
+
+        <div id="board-container">
+            <div id="game-board"></div>
+        </div>
+    </div>
+
+    <script>
+        // Représentation simplifiée de votre matrice CSV (1 = case, 0 = vide)
+        // J'ai compressé les données pour l'exemple, mais conservé la structure globale.
+        const mapData = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        let availableCells = [];
+        let totalPlayable = 0;
+
+        // Initialisation du plateau
+        function initBoard() {
+            const board = document.getElementById('game-board');
+            const rows = mapData.length;
+            const cols = mapData[0].length;
+            
+            board.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
+            board.innerHTML = '';
+            availableCells = [];
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = document.createElement('div');
+                    const isPlayable = mapData[r][c] === 1;
+                    
+                    cell.id = `cell-${r}-${c}`;
+                    cell.className = isPlayable ? 'cell cell-active' : 'cell cell-empty';
+                    
+                    if (isPlayable) {
+                        // On crée un nom de case type Excel (Ex: A1, B2...)
+                        const label = String.fromCharCode(65 + (c % 26)) + (r + 1);
+                        availableCells.push({ id: cell.id, label: label });
+                        // cell.title = label; // Affiche au survol
+                    }
+                    
+                    board.appendChild(cell);
+                }
+            }
+            totalPlayable = availableCells.length;
+            updateStats();
+        }
+
+        function drawCells() {
+            const count = parseInt(document.getElementById('drawCount').value) || 1;
+            const log = document.getElementById('log');
+
+            for (let i = 0; i < count; i++) {
+                if (availableCells.length === 0) break;
+
+                const randomIndex = Math.floor(Math.random() * availableCells.length);
+                const selected = availableCells.splice(randomIndex, 1)[0];
+
+                const cellElement = document.getElementById(selected.id);
+                cellElement.classList.add('cell-selected');
+
+                // Ajout au log
+                const entry = document.createElement('div');
+                entry.textContent = `🎯 Case tirée : ${selected.label}`;
+                log.prepend(entry);
+            }
+            updateStats();
+        }
+
+        function resetGame() {
+            document.getElementById('log').innerHTML = '';
+            initBoard();
+        }
+
+        function updateStats() {
+            document.getElementById('stat-rem').textContent = availableCells.length;
+            document.getElementById('stat-drawn').textContent = totalPlayable - availableCells.length;
+        }
+
+        // Lancer au chargement
+        initBoard();
+    </script>
+</body>
+</html>
